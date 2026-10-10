@@ -6,11 +6,13 @@ import com.example.finance.entity.TransactionType;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
-public record TransactionResponse(Long id, BigDecimal amount, LocalDate date, CategoryResponse category,
+/** A transaction as returned by the API. The category is shown by name. */
+public record TransactionResponse(Long id, BigDecimal amount, LocalDate date, String category,
                                   String description, TransactionType type) {
 
+    /** Builds the response from a transaction entity. */
     public static TransactionResponse from(Transaction t) {
         return new TransactionResponse(t.getId(), t.getAmount(), t.getTransactionDate(),
-                CategoryResponse.from(t.getCategory()), t.getDescription(), t.getType());
+                t.getCategory().getName(), t.getDescription(), t.getType());
     }
 }

@@ -10,6 +10,7 @@ import jakarta.persistence.UniqueConstraint;
 
 import java.time.Instant;
 
+/** A registered user. The email is the username; only a password hash is stored. */
 @Entity
 @Table(name = "users", uniqueConstraints = @UniqueConstraint(name = "uk_users_email", columnNames = "email"))
 public class User {

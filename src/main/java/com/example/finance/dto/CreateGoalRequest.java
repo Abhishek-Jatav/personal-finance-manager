@@ -9,9 +9,10 @@ import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/** Body of POST /api/goals. The start date is optional and defaults to today. */
 public record CreateGoalRequest(
         @NotBlank @Size(max = 100) String goalName,
         @NotNull @Positive @Digits(integer = 15, fraction = 2) BigDecimal targetAmount,
         @NotNull LocalDate targetDate,
-        @NotNull LocalDate startDate) {
+        LocalDate startDate) {
 }

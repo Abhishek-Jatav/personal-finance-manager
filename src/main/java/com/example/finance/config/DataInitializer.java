@@ -29,7 +29,7 @@ public class DataInitializer implements ApplicationRunner {
     }
 
     private void seed(String name, TransactionType type) {
-        if (categoryRepository.existsByDefaultCategoryTrueAndTypeAndNameIgnoreCase(type, name)) {
+        if (categoryRepository.existsByDefaultCategoryTrueAndNameIgnoreCase(name)) {
             return;
         }
         Category category = new Category();

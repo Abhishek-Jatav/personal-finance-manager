@@ -1,11 +1,10 @@
 package com.example.finance.service;
 
 import com.example.finance.dto.RegisterRequest;
-import com.example.finance.dto.UserResponse;
+import com.example.finance.dto.RegisterResponse;
 import com.example.finance.entity.User;
 import com.example.finance.exception.ConflictException;
 import com.example.finance.repository.UserRepository;
-import com.example.finance.security.CurrentUserProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,51 +29,45 @@ class AuthServiceTest {
     @Mock PasswordEncoder passwordEncoder;
     @Mock AuthenticationManager authenticationManager;
     @Mock SecurityContextRepository securityContextRepository;
-    @Mock CurrentUserProvider currentUserProvider;
 
     AuthService service;
 
     @BeforeEach
     void setUp() {
         service = new AuthService(userRepository, passwordEncoder, authenticationManager,
-                securityContextRepository, currentUserProvider);
+                securityContextRepository);
     }
 
     @Test
-    void register_normalizesEmail_andStoresHashNotPlaintext() {
+    void register_normalizesUsername_andStoresHashNotPlaintext() {
         when(userRepository.existsByEmail("alex@example.com")).thenReturn(false);
         when(passwordEncoder.encode("password123")).thenReturn("HASHED");
-        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User saved = inv.getArgument(0);
+            saved.setId(7L);
+            return saved;
+        });
 
-        UserResponse response = service.register(
-                new RegisterRequest(" Alex Example ", "  Alex@Example.COM ", "password123", "  "));
+        RegisterResponse response = service.register(
+                new RegisterRequest("  Alex@Example.COM ", "password123", " Alex Example ", " +1234567890 "));
 
         ArgumentCaptor<User> saved = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(saved.capture());
         assertThat(saved.getValue().getEmail()).isEqualTo("alex@example.com");
         assertThat(saved.getValue().getPasswordHash()).isEqualTo("HASHED");
         assertThat(saved.getValue().getFullName()).isEqualTo("Alex Example");
-        assertThat(saved.getValue().getPhoneNumber()).isNull();
-        assertThat(response.email()).isEqualTo("alex@example.com");
+        assertThat(saved.getValue().getPhoneNumber()).isEqualTo("+1234567890");
+        assertThat(response.message()).isEqualTo("User registered successfully");
+        assertThat(response.userId()).isEqualTo(7L);
     }
 
     @Test
-    void register_duplicateEmail_throwsConflict() {
+    void register_duplicateUsername_throwsConflict() {
         when(userRepository.existsByEmail("alex@example.com")).thenReturn(true);
 
         assertThatThrownBy(() -> service.register(
-                new RegisterRequest("Alex", "alex@example.com", "password123", null)))
+                new RegisterRequest("alex@example.com", "password123", "Alex", "+1234567890")))
                 .isInstanceOf(ConflictException.class);
         verify(userRepository, never()).save(any());
-    }
-
-    @Test
-    void me_returnsCurrentUser() {
-        User user = ServiceTestSupport.user(5);
-        user.setFullName("Sam");
-        when(currentUserProvider.getCurrentUser()).thenReturn(user);
-
-        assertThat(service.me().id()).isEqualTo(5L);
-        assertThat(service.me().fullName()).isEqualTo("Sam");
     }
 }

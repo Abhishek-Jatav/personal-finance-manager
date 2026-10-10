@@ -1,7 +1,6 @@
 package com.example.finance.integration;
 
 import com.example.finance.support.TestClockConfig;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,7 +18,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -49,16 +47,22 @@ public abstract class IntegrationTestBase {
         return objectMapper.writeValueAsString(value);
     }
 
-    protected MockHttpSession registerAndLogin(String email) throws Exception {
-        Map<String, Object> register = new HashMap<>();
-        register.put("fullName", "Test User");
-        register.put("email", email);
-        register.put("password", PASSWORD);
-        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(json(register)))
+    protected Map<String, Object> registerBody(String username) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("username", username);
+        body.put("password", PASSWORD);
+        body.put("fullName", "Test User");
+        body.put("phoneNumber", "+1234567890");
+        return body;
+    }
+
+    protected MockHttpSession registerAndLogin(String username) throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(registerBody(username))))
                 .andExpect(status().isCreated());
 
         MvcResult result = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("email", email, "password", PASSWORD))))
+                        .content(json(Map.of("username", username, "password", PASSWORD))))
                 .andExpect(status().isOk())
                 .andReturn();
         return (MockHttpSession) result.getRequest().getSession(false);
@@ -69,43 +73,31 @@ public abstract class IntegrationTestBase {
     }
 
     protected ResultActions doPost(MockHttpSession session, String url, Object body) throws Exception {
-        return mockMvc.perform(post(url).session(session).with(csrf())
+        return mockMvc.perform(post(url).session(session)
                 .contentType(MediaType.APPLICATION_JSON).content(json(body)));
     }
 
     protected ResultActions doPut(MockHttpSession session, String url, Object body) throws Exception {
-        return mockMvc.perform(put(url).session(session).with(csrf())
+        return mockMvc.perform(put(url).session(session)
                 .contentType(MediaType.APPLICATION_JSON).content(json(body)));
     }
 
     protected ResultActions doDelete(MockHttpSession session, String url) throws Exception {
-        return mockMvc.perform(delete(url).session(session).with(csrf()));
+        return mockMvc.perform(delete(url).session(session));
     }
 
-    protected Long categoryId(MockHttpSession session, String name) throws Exception {
-        String body = doGet(session, "/api/categories").andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        for (JsonNode node : objectMapper.readTree(body)) {
-            if (node.get("name").asText().equals(name)) {
-                return node.get("id").asLong();
-            }
-        }
-        throw new IllegalStateException("Category not found in test: " + name);
-    }
-
-    protected Map<String, Object> txBody(String type, String amount, String date, Long categoryId, String description) {
+    protected Map<String, Object> txBody(String category, String amount, String date, String description) {
         Map<String, Object> body = new HashMap<>();
         body.put("amount", new BigDecimal(amount));
         body.put("date", date);
-        body.put("categoryId", categoryId);
+        body.put("category", category);
         body.put("description", description);
-        body.put("type", type);
         return body;
     }
 
-    protected Long createTransaction(MockHttpSession session, String type, String amount, String date,
-                                     Long categoryId) throws Exception {
-        String body = doPost(session, "/api/transactions", txBody(type, amount, date, categoryId, "test"))
+    protected Long createTransaction(MockHttpSession session, String category, String amount, String date)
+            throws Exception {
+        String body = doPost(session, "/api/transactions", txBody(category, amount, date, "test"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(body).get("id").asLong();

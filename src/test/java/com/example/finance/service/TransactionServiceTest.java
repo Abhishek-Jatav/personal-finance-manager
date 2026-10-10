@@ -20,6 +20,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static com.example.finance.service.ServiceTestSupport.CLOCK;
@@ -47,21 +48,31 @@ class TransactionServiceTest {
         lenient().when(currentUser.getCurrentUser()).thenReturn(ServiceTestSupport.user(1));
     }
 
-    private Category category(long id, TransactionType type) {
+    private Category category(long id, String name, TransactionType type) {
         Category category = new Category();
         category.setId(id);
-        category.setName("Cat" + id);
+        category.setName(name);
         category.setType(type);
         return category;
     }
 
-    private CreateTransactionRequest create(LocalDate date, TransactionType type, String amount) {
-        return new CreateTransactionRequest(new BigDecimal(amount), date, 7L, "note", type);
+    private CreateTransactionRequest create(LocalDate date, String categoryName, String amount) {
+        return new CreateTransactionRequest(new BigDecimal(amount), date, categoryName, "note");
+    }
+
+    private Transaction existing(Category category) {
+        Transaction transaction = new Transaction();
+        transaction.setId(3L);
+        transaction.setTransactionDate(TODAY.minusDays(5));
+        transaction.setType(category.getType());
+        transaction.setCategory(category);
+        transaction.setAmount(new BigDecimal("1.00"));
+        return transaction;
     }
 
     @Test
     void createTransaction_rejectsFutureDate() {
-        assertThatThrownBy(() -> service.create(create(TODAY.plusDays(1), TransactionType.EXPENSE, "10.00")))
+        assertThatThrownBy(() -> service.create(create(TODAY.plusDays(1), "Food", "10.00")))
                 .isInstanceOf(BadRequestException.class)
                 .hasMessageContaining("future");
         verify(transactionRepository, never()).save(any());
@@ -69,52 +80,42 @@ class TransactionServiceTest {
 
     @Test
     void createTransaction_rejectsUnknownCategory() {
-        when(categoryRepository.findAvailableById(7L, 1L)).thenReturn(Optional.empty());
+        when(categoryRepository.findAvailableByName("Nope", 1L)).thenReturn(List.of());
 
-        assertThatThrownBy(() -> service.create(create(TODAY, TransactionType.EXPENSE, "10.00")))
-                .isInstanceOf(ResourceNotFoundException.class);
-    }
-
-    @Test
-    void createTransaction_rejectsCategoryTypeMismatch() {
-        when(categoryRepository.findAvailableById(7L, 1L))
-                .thenReturn(Optional.of(category(7, TransactionType.INCOME)));
-
-        assertThatThrownBy(() -> service.create(create(TODAY, TransactionType.EXPENSE, "10.00")))
+        assertThatThrownBy(() -> service.create(create(TODAY, " Nope ", "10.00")))
                 .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("does not match");
+                .hasMessageContaining("does not exist");
     }
 
     @Test
-    void createTransaction_setsOwnerFromLoggedInUser_andScalesAmount() {
-        when(categoryRepository.findAvailableById(7L, 1L))
-                .thenReturn(Optional.of(category(7, TransactionType.EXPENSE)));
+    void createTransaction_takesTypeFromCategory_setsOwner_andScalesAmount() {
+        when(categoryRepository.findAvailableByName("Salary", 1L))
+                .thenReturn(List.of(category(7, "Salary", TransactionType.INCOME)));
         when(transactionRepository.save(any(Transaction.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        TransactionResponse response = service.create(create(TODAY, TransactionType.EXPENSE, "125.5"));
+        TransactionResponse response = service.create(create(TODAY, "Salary", "125.5"));
 
         ArgumentCaptor<Transaction> saved = ArgumentCaptor.forClass(Transaction.class);
         verify(transactionRepository).save(saved.capture());
         assertThat(saved.getValue().getUser().getId()).isEqualTo(1L);
+        assertThat(response.type()).isEqualTo(TransactionType.INCOME);
+        assertThat(response.category()).isEqualTo("Salary");
         assertThat(response.amount()).isEqualTo(new BigDecimal("125.50"));
         assertThat(response.date()).isEqualTo(TODAY);
     }
 
     @Test
-    void listTransactions_rejectsFromAfterTo() {
+    void listTransactions_rejectsStartAfterEnd() {
         assertThatThrownBy(() -> service.list(TODAY, TODAY.minusDays(1), null, null))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
     void updateTransaction_rejectsDateChange() {
-        Transaction existing = new Transaction();
-        existing.setId(3L);
-        existing.setTransactionDate(TODAY.minusDays(5));
-        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(existing));
+        when(transactionRepository.findByIdAndUserId(3L, 1L))
+                .thenReturn(Optional.of(existing(category(7, "Food", TransactionType.EXPENSE))));
 
-        UpdateTransactionRequest request = new UpdateTransactionRequest(
-                new BigDecimal("10.00"), TODAY.minusDays(4), 7L, null, TransactionType.EXPENSE);
+        UpdateTransactionRequest request = new UpdateTransactionRequest(null, TODAY.minusDays(4), null, null);
 
         assertThatThrownBy(() -> service.update(3L, request))
                 .isInstanceOf(BadRequestException.class)
@@ -122,23 +123,38 @@ class TransactionServiceTest {
     }
 
     @Test
-    void updateTransaction_appliesNewValues_whenDateUnchangedOrOmitted() {
-        Transaction existing = new Transaction();
-        existing.setId(3L);
-        existing.setTransactionDate(TODAY.minusDays(5));
-        existing.setType(TransactionType.EXPENSE);
-        existing.setCategory(category(7, TransactionType.EXPENSE));
-        existing.setAmount(new BigDecimal("1.00"));
-        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(existing));
-        when(categoryRepository.findAvailableById(7L, 1L))
-                .thenReturn(Optional.of(category(7, TransactionType.EXPENSE)));
+    void updateTransaction_changesOnlyProvidedFields() {
+        Transaction tx = existing(category(7, "Food", TransactionType.EXPENSE));
+        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(tx));
 
-        TransactionResponse response = service.update(3L, new UpdateTransactionRequest(
-                new BigDecimal("42.00"), null, 7L, "  changed ", TransactionType.EXPENSE));
+        TransactionResponse response = service.update(3L,
+                new UpdateTransactionRequest(new BigDecimal("42"), tx.getTransactionDate(), null, "  changed "));
 
         assertThat(response.amount()).isEqualTo(new BigDecimal("42.00"));
         assertThat(response.description()).isEqualTo("changed");
+        assertThat(response.category()).isEqualTo("Food");
         assertThat(response.date()).isEqualTo(TODAY.minusDays(5));
+    }
+
+    @Test
+    void updateTransaction_changingCategoryChangesType() {
+        Transaction tx = existing(category(7, "Food", TransactionType.EXPENSE));
+        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(tx));
+        when(categoryRepository.findAvailableByName("Salary", 1L))
+                .thenReturn(List.of(category(8, "Salary", TransactionType.INCOME)));
+
+        TransactionResponse response = service.update(3L, new UpdateTransactionRequest(null, null, "Salary", null));
+
+        assertThat(response.type()).isEqualTo(TransactionType.INCOME);
+        assertThat(response.category()).isEqualTo("Salary");
+    }
+
+    @Test
+    void updateTransaction_notOwned_throwsNotFound() {
+        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.update(3L, new UpdateTransactionRequest(null, null, null, null)))
+                .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
@@ -151,11 +167,11 @@ class TransactionServiceTest {
 
     @Test
     void deleteTransaction_owned_deletesIt() {
-        Transaction existing = new Transaction();
-        when(transactionRepository.findByIdAndUserId(9L, 1L)).thenReturn(Optional.of(existing));
+        Transaction tx = new Transaction();
+        when(transactionRepository.findByIdAndUserId(9L, 1L)).thenReturn(Optional.of(tx));
 
         service.delete(9L);
 
-        verify(transactionRepository).delete(existing);
+        verify(transactionRepository).delete(tx);
     }
 }

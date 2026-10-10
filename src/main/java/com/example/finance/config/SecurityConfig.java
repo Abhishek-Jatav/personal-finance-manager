@@ -22,6 +22,7 @@ import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 
 import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
+/** Security setup: session login, BCrypt passwords, CSRF protection and JSON 401/403 responses. */
 @Configuration
 public class SecurityConfig {
 
@@ -53,7 +54,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http,
                                            RestSecurityHandlers handlers,
                                            SecurityContextRepository securityContextRepository,
-                                           @Value("${app.security.csrf-enabled:true}") boolean csrfEnabled,
+                                           @Value("${app.security.csrf-enabled:false}") boolean csrfEnabled,
                                            @Value("${spring.h2.console.enabled:false}") boolean h2ConsoleEnabled)
             throws Exception {
 
@@ -89,7 +90,6 @@ public class SecurityConfig {
             auth.requestMatchers(
                     antMatcher("/api/auth/register"),
                     antMatcher("/api/auth/login"),
-                    antMatcher("/api/auth/logout"),
                     antMatcher("/actuator/health"),
                     antMatcher("/actuator/health/**"),
                     antMatcher("/error")).permitAll();

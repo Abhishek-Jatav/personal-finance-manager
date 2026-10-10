@@ -1,12 +1,12 @@
 package com.example.finance.service;
 
 import com.example.finance.dto.LoginRequest;
+import com.example.finance.dto.MessageResponse;
 import com.example.finance.dto.RegisterRequest;
-import com.example.finance.dto.UserResponse;
+import com.example.finance.dto.RegisterResponse;
 import com.example.finance.entity.User;
 import com.example.finance.exception.ConflictException;
 import com.example.finance.repository.UserRepository;
-import com.example.finance.security.CurrentUserProvider;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
@@ -21,6 +21,7 @@ import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** Registration, login and logout. Login state lives in the HTTP session (the session cookie). */
 @Service
 public class AuthService {
 
@@ -28,42 +29,48 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final SecurityContextRepository securityContextRepository;
-    private final CurrentUserProvider currentUserProvider;
 
     public AuthService(UserRepository userRepository,
                        PasswordEncoder passwordEncoder,
                        AuthenticationManager authenticationManager,
-                       SecurityContextRepository securityContextRepository,
-                       CurrentUserProvider currentUserProvider) {
+                       SecurityContextRepository securityContextRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
         this.securityContextRepository = securityContextRepository;
-        this.currentUserProvider = currentUserProvider;
     }
 
+    /**
+     * Creates a new account. The username (an email) is trimmed and lower-cased, and the password is stored as a hash.
+     *
+     * @throws ConflictException if the username is already registered
+     */
     @Transactional
-    public UserResponse register(RegisterRequest request) {
-        String email = normalizeEmail(request.email());
+    public RegisterResponse register(RegisterRequest request) {
+        String email = normalizeEmail(request.username());
         if (userRepository.existsByEmail(email)) {
-            throw new ConflictException("An account with this email already exists");
+            throw new ConflictException("An account with this username already exists");
         }
         User user = new User();
         user.setFullName(request.fullName().trim());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        String phone = request.phoneNumber() == null ? null : request.phoneNumber().trim();
-        user.setPhoneNumber(phone == null || phone.isEmpty() ? null : phone);
+        user.setPhoneNumber(request.phoneNumber().trim());
         try {
-            return UserResponse.from(userRepository.save(user));
+            User saved = userRepository.save(user);
+            return new RegisterResponse("User registered successfully", saved.getId());
         } catch (DataIntegrityViolationException ex) {
-            throw new ConflictException("An account with this email already exists");
+            throw new ConflictException("An account with this username already exists");
         }
     }
 
-    /** Checks the password, then stores the login in the HTTP session (the session cookie is the proof of login). */
-    public UserResponse login(LoginRequest request, HttpServletRequest httpRequest, HttpServletResponse httpResponse) {
-        String email = normalizeEmail(request.email());
+    /**
+     * Checks the credentials and stores the login in the HTTP session.
+     * A wrong username or password results in a 401 response.
+     */
+    public MessageResponse login(LoginRequest request, HttpServletRequest httpRequest,
+                                 HttpServletResponse httpResponse) {
+        String email = normalizeEmail(request.username());
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(email, request.password()));
 
@@ -74,23 +81,17 @@ public class AuthService {
         context.setAuthentication(authentication);
         SecurityContextHolder.setContext(context);
         securityContextRepository.saveContext(context, httpRequest, httpResponse);
-
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new IllegalStateException("Authenticated user disappeared"));
-        return UserResponse.from(user);
+        return new MessageResponse("Login successful");
     }
 
-    public void logout(HttpServletRequest httpRequest) {
+    /** Invalidates the current session. */
+    public MessageResponse logout(HttpServletRequest httpRequest) {
         HttpSession session = httpRequest.getSession(false);
         if (session != null) {
             session.invalidate();
         }
         SecurityContextHolder.clearContext();
-    }
-
-    @Transactional(readOnly = true)
-    public UserResponse me() {
-        return UserResponse.from(currentUserProvider.getCurrentUser());
+        return new MessageResponse("Logout successful");
     }
 
     private String normalizeEmail(String email) {

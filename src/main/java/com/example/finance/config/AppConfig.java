@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Clock;
 import java.time.ZoneId;
 
+/** General application beans, such as the business clock. */
 @Configuration
 public class AppConfig {
 

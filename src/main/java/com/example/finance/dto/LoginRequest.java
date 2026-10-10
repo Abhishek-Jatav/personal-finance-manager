@@ -2,5 +2,6 @@ package com.example.finance.dto;
 
 import jakarta.validation.constraints.NotBlank;
 
-public record LoginRequest(@NotBlank String email, @NotBlank String password) {
+/** Body of POST /api/auth/login. */
+public record LoginRequest(@NotBlank String username, @NotBlank String password) {
 }

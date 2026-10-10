@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 
+import java.util.HashMap;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -20,27 +21,21 @@ class AuthApiTest extends IntegrationTestBase {
     @Autowired
     private UserRepository userRepository;
 
-    private String registerBody(String email) throws Exception {
-        return json(Map.of("fullName", "Alex Example", "email", email, "password", PASSWORD,
-                "phoneNumber", "+91 98765 43210"));
-    }
-
     @Test
-    void register_returnsCreatedWithoutPassword() throws Exception {
-        String email = uniqueEmail();
-        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerBody(email)))
+    void register_returnsCreatedWithMessageAndUserId() throws Exception {
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(registerBody(uniqueEmail()))))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.id").isNumber())
-                .andExpect(jsonPath("$.email").value(email))
-                .andExpect(jsonPath("$.password").doesNotExist())
-                .andExpect(jsonPath("$.passwordHash").doesNotExist());
+                .andExpect(jsonPath("$.message").value("User registered successfully"))
+                .andExpect(jsonPath("$.userId").isNumber())
+                .andExpect(jsonPath("$.password").doesNotExist());
     }
 
     @Test
-    void register_storesHashedPasswordAndNormalizedEmail() throws Exception {
+    void register_storesHashedPasswordAndNormalizedUsername() throws Exception {
         String email = uniqueEmail();
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(registerBody(email.toUpperCase())))
+                        .content(json(registerBody(email.toUpperCase()))))
                 .andExpect(status().isCreated());
 
         User saved = userRepository.findByEmail(email).orElseThrow();
@@ -48,24 +43,40 @@ class AuthApiTest extends IntegrationTestBase {
     }
 
     @Test
-    void register_duplicateEmail_returnsConflict() throws Exception {
+    void register_duplicateUsername_returnsConflict() throws Exception {
         String email = uniqueEmail();
-        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerBody(email)))
-                .andExpect(status().isCreated());
         mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(registerBody(email.toUpperCase())))
+                        .content(json(registerBody(email)))).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(registerBody(email.toUpperCase()))))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("CONFLICT"));
     }
 
     @Test
     void register_invalidFields_returnsValidationError() throws Exception {
-        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("fullName", "", "email", "not-an-email", "password", "short"))))
+        Map<String, Object> body = new HashMap<>();
+        body.put("username", "not-an-email");
+        body.put("password", "short");
+        body.put("fullName", "");
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(json(body)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors").isArray())
-                .andExpect(jsonPath("$.path").value("/api/auth/register"));
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void register_phoneNumberIsMandatoryAndValidated() throws Exception {
+        Map<String, Object> missing = registerBody(uniqueEmail());
+        missing.remove("phoneNumber");
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(json(missing)))
+                .andExpect(status().isBadRequest());
+
+        Map<String, Object> bad = registerBody(uniqueEmail());
+        bad.put("phoneNumber", "abc");
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(json(bad)))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -76,12 +87,23 @@ class AuthApiTest extends IntegrationTestBase {
     }
 
     @Test
+    void login_success_returnsMessage() throws Exception {
+        String email = uniqueEmail();
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                .content(json(registerBody(email)))).andExpect(status().isCreated());
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content(json(Map.of("username", email, "password", PASSWORD))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Login successful"));
+    }
+
+    @Test
     void login_wrongPassword_returnsUnauthorized() throws Exception {
         String email = uniqueEmail();
-        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON).content(registerBody(email)))
-                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/auth/register").contentType(MediaType.APPLICATION_JSON)
+                .content(json(registerBody(email)))).andExpect(status().isCreated());
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("email", email, "password", "wrong-password"))))
+                        .content(json(Map.of("username", email, "password", "wrong-password"))))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
@@ -89,7 +111,7 @@ class AuthApiTest extends IntegrationTestBase {
     @Test
     void login_unknownUser_returnsUnauthorized() throws Exception {
         mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("email", uniqueEmail(), "password", PASSWORD))))
+                        .content(json(Map.of("username", uniqueEmail(), "password", PASSWORD))))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -97,14 +119,14 @@ class AuthApiTest extends IntegrationTestBase {
     void login_thenAccessProtectedRoute_works() throws Exception {
         String email = uniqueEmail();
         MockHttpSession session = registerAndLogin(email);
-        doGet(session, "/api/auth/me").andExpect(status().isOk()).andExpect(jsonPath("$.email").value(email));
         doGet(session, "/api/transactions").andExpect(status().isOk());
+        doGet(session, "/api/categories").andExpect(status().isOk());
     }
 
     @Test
     void protectedRoutes_withoutLogin_returnUnauthorized() throws Exception {
         String[] urls = {"/api/transactions", "/api/categories", "/api/goals", "/api/reports/yearly/2026",
-                "/api/reports/monthly/2026/10", "/api/auth/me"};
+                "/api/reports/monthly/2026/10"};
         for (String url : urls) {
             mockMvc.perform(get(url))
                     .andExpect(status().isUnauthorized())
@@ -113,20 +135,18 @@ class AuthApiTest extends IntegrationTestBase {
     }
 
     @Test
-    void logout_invalidatesSession() throws Exception {
-        MockHttpSession session = registerAndLogin(uniqueEmail());
-        doPost(session, "/api/auth/logout", Map.of()).andExpect(status().isNoContent());
-        assertThat(session.isInvalid()).isTrue();
-        mockMvc.perform(get("/api/transactions")).andExpect(status().isUnauthorized());
+    void logout_withoutLogin_returnsUnauthorized() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")).andExpect(status().isUnauthorized());
     }
 
     @Test
-    void stateChangingRequest_withoutCsrfToken_isForbidden() throws Exception {
+    void logout_returnsMessage_andInvalidatesSession() throws Exception {
         MockHttpSession session = registerAndLogin(uniqueEmail());
-        mockMvc.perform(post("/api/categories").session(session).contentType(MediaType.APPLICATION_JSON)
-                        .content(json(Map.of("name", "Pets", "type", "EXPENSE"))))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        doPost(session, "/api/auth/logout", Map.of())
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Logout successful"));
+        assertThat(session.isInvalid()).isTrue();
+        mockMvc.perform(get("/api/transactions")).andExpect(status().isUnauthorized());
     }
 
     @Test

@@ -10,6 +10,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/** Loads a user by username (email) for Spring Security. */
 @Service
 public class AppUserDetailsService implements UserDetailsService {
 

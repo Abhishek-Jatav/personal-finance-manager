@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
+/** One income or expense entry that belongs to exactly one user. */
 @Entity
 @Table(name = "transactions", indexes = {
         @Index(name = "idx_tx_user_date", columnList = "user_id, transaction_date"),

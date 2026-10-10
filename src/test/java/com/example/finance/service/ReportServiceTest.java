@@ -1,6 +1,7 @@
 package com.example.finance.service;
 
-import com.example.finance.dto.ReportResponse;
+import com.example.finance.dto.MonthlyReportResponse;
+import com.example.finance.dto.YearlyReportResponse;
 import com.example.finance.entity.TransactionType;
 import com.example.finance.exception.BadRequestException;
 import com.example.finance.repository.TransactionRepository;
@@ -45,7 +46,7 @@ class ReportServiceTest {
     }
 
     @Test
-    void monthlyReport_totalsAndNetSavings() {
+    void monthlyReport_totalsByCategoryAndNetSavings() {
         LocalDate start = LocalDate.of(2026, 10, 1);
         LocalDate end = LocalDate.of(2026, 10, 31);
         when(transactionRepository.totalsByCategory(1L, TransactionType.INCOME, start, end)).thenReturn(rows(
@@ -55,25 +56,23 @@ class ReportServiceTest {
                 new Object[]{"Food", new BigDecimal("250.00")},
                 new Object[]{"Rent", new BigDecimal("750.00")}));
 
-        ReportResponse report = service.monthly(2026, 10);
+        MonthlyReportResponse report = service.monthly(2026, 10);
 
-        assertThat(report.period()).isEqualTo("2026-10");
-        assertThat(report.totalIncome()).isEqualByComparingTo("3500.00");
-        assertThat(report.totalExpenses()).isEqualByComparingTo("1000.00");
+        assertThat(report.month()).isEqualTo(10);
+        assertThat(report.year()).isEqualTo(2026);
+        assertThat(report.totalIncome()).containsOnlyKeys("Freelance", "Salary");
+        assertThat(report.totalIncome().get("Salary")).isEqualByComparingTo("3000.00");
+        assertThat(report.totalExpenses().get("Rent")).isEqualByComparingTo("750.00");
         assertThat(report.netSavings()).isEqualByComparingTo("2500.00");
-        assertThat(report.incomeByCategory()).hasSize(2);
-        assertThat(report.expensesByCategory().get(1).categoryName()).isEqualTo("Rent");
     }
 
     @Test
-    void monthlyReport_emptyPeriod_returnsZerosAndEmptyLists() {
-        ReportResponse report = service.monthly(2026, 9);
+    void monthlyReport_emptyPeriod_returnsZeroAndEmptyMaps() {
+        MonthlyReportResponse report = service.monthly(2026, 9);
 
-        assertThat(report.totalIncome()).isEqualByComparingTo("0.00");
-        assertThat(report.totalExpenses()).isEqualByComparingTo("0.00");
+        assertThat(report.totalIncome()).isEmpty();
+        assertThat(report.totalExpenses()).isEmpty();
         assertThat(report.netSavings()).isEqualByComparingTo("0.00");
-        assertThat(report.incomeByCategory()).isEmpty();
-        assertThat(report.expensesByCategory()).isEmpty();
     }
 
     @Test
@@ -94,11 +93,16 @@ class ReportServiceTest {
 
     @Test
     void yearlyReport_coversJanuaryFirstToDecemberThirtyFirst() {
-        ReportResponse report = service.yearly(2026);
+        LocalDate start = LocalDate.of(2026, 1, 1);
+        LocalDate end = LocalDate.of(2026, 12, 31);
+        when(transactionRepository.totalsByCategory(1L, TransactionType.INCOME, start, end)).thenReturn(rows());
+        when(transactionRepository.totalsByCategory(1L, TransactionType.EXPENSE, start, end))
+                .thenReturn(rows(new Object[]{"Food", new BigDecimal("100.00")}, new Object[]{"Rent", new BigDecimal("50.00")}));
 
-        assertThat(report.period()).isEqualTo("2026");
-        verify(transactionRepository).totalsByCategory(
-                1L, TransactionType.INCOME, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31));
+        YearlyReportResponse report = service.yearly(2026);
+
+        assertThat(report.year()).isEqualTo(2026);
+        assertThat(report.netSavings()).isEqualByComparingTo("-150.00");
     }
 
     @Test

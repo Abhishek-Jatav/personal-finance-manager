@@ -1,84 +1,57 @@
 # Personal Finance Manager API
 
-A REST API where each user can record income and expenses, organise them by category, track savings goals, and see monthly and yearly reports. Every user only ever sees their own data.
+A REST API where each user can record income and expenses, organise them by category, track savings goals, and see monthly and yearly reports. Every user only sees their own data.
 
-Built with Java 17, Spring Boot 3, Maven, Spring Data JPA, Spring Security (session login), Bean Validation and H2.
+Built with Java 17, Spring Boot 3, Maven, Spring Data JPA, Spring Security (session login), Bean Validation and H2. The request and response formats follow the assignment PDF.
 
 ## 1. What you need
 
 - Java 17 or newer
-- Maven 3.9 or newer (the Maven wrapper is not included)
+- Maven 3.9 or newer
 
 ## 2. Run it on your computer
 
-Open a terminal in this folder and run:
-
     mvn spring-boot:run
 
-The API starts at http://localhost:8080. It uses the "local" profile by default: an in-memory H2 database (data is lost when you stop the app) and the H2 console at http://localhost:8080/h2-console (JDBC URL: jdbc:h2:mem:financedb, user: sa, empty password).
+The API starts at http://localhost:8080 with the "local" profile: an in-memory H2 database (data is lost when you stop the app) and the H2 console at http://localhost:8080/h2-console (JDBC URL jdbc:h2:mem:financedb, user sa, empty password).
 
-Health check: GET http://localhost:8080/actuator/health
+Health check: http://localhost:8080/actuator/health
 
 ## 3. Run the tests and see coverage
 
     mvn clean verify
 
-- Runs all unit tests and API integration tests.
+- Runs the unit tests and the API tests.
 - Writes the JaCoCo report to target/site/jacoco/index.html.
-- The build fails if line coverage drops below 80 percent.
+- The build fails if line coverage is below 80 percent.
 
-To only run tests: mvn test
-
-## 4. How login works (important for API clients)
+## 4. How login works
 
 1. POST /api/auth/register creates an account.
-2. POST /api/auth/login checks the password and returns a session cookie (JSESSIONID). Send this cookie on every later request.
-3. For POST, PUT and DELETE requests, CSRF protection is on. The server sends a cookie named XSRF-TOKEN. Copy its value into a header named X-XSRF-TOKEN on every POST, PUT and DELETE request. A simple way to get the cookie is to call GET /api/auth/me after login.
-4. Register and login do not need the CSRF header. Logout does.
-5. POST /api/auth/logout ends the session.
+2. POST /api/auth/login checks the password and returns a session cookie (JSESSIONID). Send this cookie on every later request. Thunder Client, Postman and curl (with a cookie jar) do this automatically.
+3. POST /api/auth/logout ends the session.
 
-Example with curl (cookies saved in a file):
+All routes except register and login need a valid session and return 401 otherwise.
 
-    curl -c jar.txt -H "Content-Type: application/json" -d '{"fullName":"Alex","email":"alex@example.com","password":"a-long-password"}' http://localhost:8080/api/auth/register
-    curl -c jar.txt -b jar.txt -H "Content-Type: application/json" -d '{"email":"alex@example.com","password":"a-long-password"}' http://localhost:8080/api/auth/login
-    curl -c jar.txt -b jar.txt http://localhost:8080/api/auth/me
-    TOKEN=$(grep XSRF-TOKEN jar.txt | awk '{print $7}')
-    curl -b jar.txt -H "X-XSRF-TOKEN: $TOKEN" -H "Content-Type: application/json" -d '{"amount":125.50,"date":"2026-10-05","categoryId":2,"description":"Groceries","type":"EXPENSE"}' http://localhost:8080/api/transactions
+Example with curl:
 
-If an assignment test script cannot send a CSRF token, you can switch CSRF off for that run only with the setting app.security.csrf-enabled=false (or the environment variable APP_SECURITY_CSRF_ENABLED=false). Keep it on otherwise.
+    curl -c jar.txt -H "Content-Type: application/json" -d '{"username":"user@example.com","password":"password123","fullName":"John Doe","phoneNumber":"+1234567890"}' http://localhost:8080/api/auth/register
+    curl -c jar.txt -b jar.txt -H "Content-Type: application/json" -d '{"username":"user@example.com","password":"password123"}' http://localhost:8080/api/auth/login
+    curl -b jar.txt -H "Content-Type: application/json" -d '{"amount":50000.00,"date":"2024-01-15","category":"Salary","description":"January Salary"}' http://localhost:8080/api/transactions
+
+The PDF asks for session cookies only, so CSRF protection is off by default. It can be switched on with APP_SECURITY_CSRF_ENABLED=true (clients then send the X-XSRF-TOKEN header on POST, PUT and DELETE).
 
 ## 5. Endpoints
 
-Authentication
-- POST /api/auth/register - 201, 400 (invalid), 409 (email already used)
-- POST /api/auth/login - 200 with user summary, 401 (wrong email or password)
-- POST /api/auth/logout - 204
-- GET /api/auth/me - 200, 401
+Full details with examples: docs/api.md
 
-Transactions (login required)
-- POST /api/transactions - 201
-- GET /api/transactions - optional filters: from, to (YYYY-MM-DD, inclusive), categoryId, type (INCOME or EXPENSE). Newest first.
-- PUT /api/transactions/{id} - 200. The date cannot be changed (send the same date or leave it out).
-- DELETE /api/transactions/{id} - 204
+- Auth: POST /api/auth/register, POST /api/auth/login, POST /api/auth/logout
+- Transactions: POST, GET (startDate, endDate, categoryId, type), PUT /{id}, DELETE /{id} under /api/transactions
+- Categories: GET /api/categories, POST /api/categories, DELETE /api/categories/{name}
+- Goals: POST, GET, GET /{id}, PUT /{id}, DELETE /{id} under /api/goals
+- Reports: GET /api/reports/monthly/{year}/{month}, GET /api/reports/yearly/{year}
 
-Categories (login required)
-- GET /api/categories - default categories plus your own
-- POST /api/categories - body: name, type. 201, or 409 if the name already exists
-- DELETE /api/categories/{name} - 204. Add ?type=INCOME or ?type=EXPENSE only if you have two categories with the same name.
-
-Savings goals (login required)
-- POST /api/goals, GET /api/goals, GET /api/goals/{id}, PUT /api/goals/{id}, DELETE /api/goals/{id}
-- Responses include progress, completionPercentage and remaining, calculated live from your transactions.
-
-Reports (login required)
-- GET /api/reports/monthly/{year}/{month}
-- GET /api/reports/yearly/{year}
-
-Full details: docs/api.md
-
-## 6. Error format
-
-Every error uses the same JSON shape:
+Error format (every error):
 
     {
       "timestamp": "2026-10-10T06:00:00Z",
@@ -90,43 +63,34 @@ Every error uses the same JSON shape:
       "path": "/api/transactions"
     }
 
-Status codes: 400 invalid input, 401 not logged in, 403 forbidden (also a missing CSRF token), 404 not found or not yours, 409 conflict, 500 unexpected error (no stack trace is sent).
+## 6. Design decisions
 
-## 7. Decisions made where the specs were open
+- Layers: Controller, Service, Repository. DTOs are separate from entities. One global exception handler (@RestControllerAdvice).
+- Money uses BigDecimal with 2 decimals. Goal percentages are rounded to 2 decimals (HALF_UP).
+- Goal progress and reports are calculated from current transactions every time, so edits and deletes are reflected at once.
+- The transaction type comes from the category you choose. Categories are sent by name.
+- Category names are unique per user and cannot equal a default name (ignoring case). This keeps name lookups unambiguous.
+- Status codes follow the PDF: deleting a default category is 403; deleting a category used by a transaction is 400; another user's goal is 403; another user's transaction is 404 (the PDF does not list 403 for transactions).
+- Goal target date must be in the future. Goal start date defaults to today and cannot be in the future.
+- Business timezone is Asia/Kolkata (app.timezone) and currency is INR (app.currency). "Today" and the "no future dates" rule use this timezone.
+- Passwords are stored with BCrypt. The session cookie is HttpOnly (Secure on HTTPS in prod). CSRF is off by default because the PDF does not ask for it.
 
-- Currency: INR (app.currency). No currency conversion.
-- Business timezone: Asia/Kolkata (app.timezone). "Today" and the "no future dates" rule use it.
-- Money has 2 decimal places. More than 2 decimals is rejected.
-- Completion percentage is rounded to 2 decimals (HALF_UP). Progress and remaining are never clamped, so they can be negative or above the target.
-- Goal progress counts your income minus expenses from the goal start date up to today (inclusive).
-- Deleting a default category returns 403. Deleting someone else's or a missing category returns 404. Deleting a category used by a transaction returns 409.
-- Goal update (PUT) needs targetAmount and targetDate. goalName is optional. The start date cannot be changed.
-- Logout always returns 204, even if you were not logged in.
-- Category names with a slash (/) cannot be deleted by name because of the URL path.
-- The exact JSON shapes of the original assignment PDF and test script were not supplied. Compare them with docs/api.md before submitting and adjust field names if they differ.
+## 7. Deploying on Render
 
-## 8. Deploying (for example on Render)
+The H2 database lives in memory, so data is lost when the app restarts. The assignment lists H2 as optional, so this is acceptable for the demo.
 
-The H2 database lives in memory, so all data is lost whenever the app restarts. If the assignment needs data to survive restarts, use a hosted database: add its JDBC driver to pom.xml (for example PostgreSQL) and set the environment variables below.
+1. Push the project to a public GitHub repository.
+2. On Render choose New, Web Service, pick the repository and choose the Docker runtime (a Dockerfile is included).
+3. Set the health check path to /actuator/health and deploy.
+4. Run: bash financial_manager_tests.sh https://YOUR-APP.onrender.com/api
+5. Email the repository link, the deployed URL and a screenshot of the test report.
 
-Render runs Java through Docker, so a Dockerfile is included.
+The prod profile turns off the H2 console and marks the session cookie Secure, so login only works over https there.
 
-1. Push this project to a public GitHub repository.
-2. On Render, create a new Web Service from the repository and choose the Docker runtime.
-3. Set these environment variables:
-   - SPRING_PROFILES_ACTIVE = prod (already set inside the Dockerfile)
-   - SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD (only if you use a hosted database)
-   - Render provides PORT automatically.
-4. Deploy and check /actuator/health.
-5. Register, log in, create a transaction, view a report, then run the assignment test script against your public URL.
-6. Save the repository URL, the deployed URL and a screenshot of the test report.
-
-The prod profile turns off the H2 console, marks the session cookie as Secure (HTTPS only) and trusts the host's forwarded headers. Because the cookie is Secure, login will not work over plain http in the prod profile.
-
-## 9. Project layout
+## 8. Project layout
 
     src/main/java/com/example/finance
-      config/       app settings, security setup, default category seeding
+      config/       settings, security setup, default category seeding
       controller/   HTTP routes only
       service/      business rules
       repository/   database access (always scoped to the logged-in user)
@@ -135,14 +99,12 @@ The prod profile turns off the H2 console, marks the session cookie as Secure (H
       security/     login helpers
       exception/    error handling
     src/test/java   unit tests (service) and API tests (integration)
-    docs/           the original specification documents
+    docs/           the original specification documents (docs/api.md is the current API)
 
-## 10. Configuration reference
+## 9. Settings
 
 - SPRING_PROFILES_ACTIVE: local (default), test or prod
-- SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD: database
-- SPRING_JPA_HIBERNATE_DDL_AUTO: update by default; use proper migrations (Flyway or Liquibase) for a real production database
-- SPRING_H2_CONSOLE_ENABLED: true only in local
+- SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD: database (prod)
+- APP_SECURITY_CSRF_ENABLED: false by default
 - APP_TIMEZONE, APP_CURRENCY: business settings
-- APP_SECURITY_CSRF_ENABLED: true by default
 - PORT: HTTP port in prod

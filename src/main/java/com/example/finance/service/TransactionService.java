@@ -1,6 +1,7 @@
 package com.example.finance.service;
 
 import com.example.finance.dto.CreateTransactionRequest;
+import com.example.finance.dto.TransactionListResponse;
 import com.example.finance.dto.TransactionResponse;
 import com.example.finance.dto.UpdateTransactionRequest;
 import com.example.finance.entity.Category;
@@ -17,12 +18,12 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.List;
 
+/** Business rules for transactions. Every operation is limited to the logged-in user's own data. */
 @Service
 public class TransactionService {
 
@@ -41,35 +42,51 @@ public class TransactionService {
         this.clock = clock;
     }
 
+    /**
+     * Creates a transaction. The date must not be in the future, and the category (given by name)
+     * must be a default category or one of the user's own. The type is taken from the category.
+     */
     @Transactional
     public TransactionResponse create(CreateTransactionRequest request) {
         User user = currentUser.getCurrentUser();
         if (request.date().isAfter(LocalDate.now(clock))) {
             throw new BadRequestException("Date cannot be in the future", "date");
         }
-        Category category = resolveCategory(request.categoryId(), user.getId(), request.type());
+        Category category = resolveCategory(request.category(), user.getId());
 
         Transaction transaction = new Transaction();
         transaction.setUser(user);
         transaction.setTransactionDate(request.date());
-        apply(transaction, request.amount(), request.description(), request.type(), category);
+        transaction.setAmount(request.amount().setScale(2, RoundingMode.HALF_UP));
+        transaction.setDescription(clean(request.description()));
+        transaction.setCategory(category);
+        transaction.setType(category.getType());
         return TransactionResponse.from(transactionRepository.save(transaction));
     }
 
+    /** Lists the user's transactions, newest first, with optional filters (null means no filter). */
     @Transactional(readOnly = true)
-    public List<TransactionResponse> list(LocalDate from, LocalDate to, Long categoryId, TransactionType type) {
-        if (from != null && to != null && from.isAfter(to)) {
-            throw new BadRequestException("'from' must not be after 'to'", "from");
+    public TransactionListResponse list(LocalDate startDate, LocalDate endDate, Long categoryId,
+                                        TransactionType type) {
+        if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
+            throw new BadRequestException("'startDate' must not be after 'endDate'", "startDate");
         }
         User user = currentUser.getCurrentUser();
         Sort newestFirst = Sort.by(Sort.Direction.DESC, "transactionDate").and(Sort.by(Sort.Direction.DESC, "id"));
-        return transactionRepository
-                .findAll(TransactionSpecifications.filter(user.getId(), from, to, categoryId, type), newestFirst)
+        List<TransactionResponse> items = transactionRepository
+                .findAll(TransactionSpecifications.filter(user.getId(), startDate, endDate, categoryId, type),
+                        newestFirst)
                 .stream()
                 .map(TransactionResponse::from)
                 .toList();
+        return new TransactionListResponse(items);
     }
 
+    /**
+     * Updates amount, description and/or category. The date can never change.
+     *
+     * @throws ResourceNotFoundException if the transaction does not exist or is not the user's
+     */
     @Transactional
     public TransactionResponse update(Long id, UpdateTransactionRequest request) {
         User user = currentUser.getCurrentUser();
@@ -78,11 +95,25 @@ public class TransactionService {
         if (request.date() != null && !request.date().equals(transaction.getTransactionDate())) {
             throw new BadRequestException("The date of a transaction cannot be changed", "date");
         }
-        Category category = resolveCategory(request.categoryId(), user.getId(), request.type());
-        apply(transaction, request.amount(), request.description(), request.type(), category);
+        if (request.category() != null && !request.category().isBlank()) {
+            Category category = resolveCategory(request.category(), user.getId());
+            transaction.setCategory(category);
+            transaction.setType(category.getType());
+        }
+        if (request.amount() != null) {
+            transaction.setAmount(request.amount().setScale(2, RoundingMode.HALF_UP));
+        }
+        if (request.description() != null) {
+            transaction.setDescription(clean(request.description()));
+        }
         return TransactionResponse.from(transaction);
     }
 
+    /**
+     * Deletes a transaction. It disappears from goals and reports immediately because those are calculated live.
+     *
+     * @throws ResourceNotFoundException if the transaction does not exist or is not the user's
+     */
     @Transactional
     public void delete(Long id) {
         User user = currentUser.getCurrentUser();
@@ -91,21 +122,18 @@ public class TransactionService {
         transactionRepository.delete(transaction);
     }
 
-    private Category resolveCategory(Long categoryId, Long userId, TransactionType type) {
-        Category category = categoryRepository.findAvailableById(categoryId, userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Category not found"));
-        if (category.getType() != type) {
-            throw new BadRequestException(
-                    "Category type " + category.getType() + " does not match transaction type " + type, "type");
-        }
-        return category;
+    private Category resolveCategory(String name, Long userId) {
+        String trimmed = name.trim();
+        return categoryRepository.findAvailableByName(trimmed, userId).stream().findFirst()
+                .orElseThrow(() -> new BadRequestException(
+                        "Category '" + trimmed + "' does not exist or is not available to you", "category"));
     }
 
-    private void apply(Transaction transaction, BigDecimal amount, String description,
-                       TransactionType type, Category category) {
-        transaction.setAmount(amount.setScale(2, RoundingMode.HALF_UP));
-        transaction.setDescription(description == null ? null : description.trim());
-        transaction.setType(type);
-        transaction.setCategory(category);
+    private String clean(String text) {
+        if (text == null) {
+            return null;
+        }
+        String trimmed = text.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }

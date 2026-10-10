@@ -10,12 +10,13 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Builds the optional filters for listing transactions. */
 public final class TransactionSpecifications {
 
     private TransactionSpecifications() {
     }
 
-    /** Always scoped to the owner; the other filters are optional. */
+    /** Always scoped to the owner; every other filter is optional (null means "no filter"). */
     public static Specification<Transaction> filter(Long userId, LocalDate from, LocalDate to,
                                                     Long categoryId, TransactionType type) {
         return (root, query, cb) -> {

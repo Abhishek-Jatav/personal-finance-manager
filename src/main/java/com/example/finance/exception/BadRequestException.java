@@ -1,5 +1,6 @@
 package com.example.finance.exception;
 
+/** Thrown when a request breaks a business rule (HTTP 400). May name the offending field. */
 public class BadRequestException extends RuntimeException {
 
     private final String field;

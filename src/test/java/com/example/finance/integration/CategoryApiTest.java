@@ -23,16 +23,19 @@ class CategoryApiTest extends IntegrationTestBase {
     private CategoryRepository categoryRepository;
 
     @Test
-    void list_containsAllSevenDefaults() throws Exception {
+    void list_containsAllSevenDefaults_marked_notCustom() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doGet(s, "/api/categories").andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].name", hasItem("Salary")))
-                .andExpect(jsonPath("$[*].name", hasItem("Food")))
-                .andExpect(jsonPath("$[*].name", hasItem("Rent")))
-                .andExpect(jsonPath("$[*].name", hasItem("Transportation")))
-                .andExpect(jsonPath("$[*].name", hasItem("Entertainment")))
-                .andExpect(jsonPath("$[*].name", hasItem("Healthcare")))
-                .andExpect(jsonPath("$[*].name", hasItem("Utilities")));
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Salary")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Food")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Rent")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Transportation")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Entertainment")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Healthcare")))
+                .andExpect(jsonPath("$.categories[*].name", hasItem("Utilities")))
+                .andExpect(jsonPath("$.categories[?(@.name == 'Salary')].type", hasItem("INCOME")))
+                .andExpect(jsonPath("$.categories[?(@.name == 'Salary')].isCustom", hasItem(false)))
+                .andExpect(jsonPath("$.categories[0].custom").doesNotExist());
     }
 
     @Test
@@ -47,12 +50,22 @@ class CategoryApiTest extends IntegrationTestBase {
     void create_customCategory_isPrivateToOwner() throws Exception {
         MockHttpSession a = registerAndLogin(uniqueEmail());
         MockHttpSession b = registerAndLogin(uniqueEmail());
-        doPost(a, "/api/categories", Map.of("name", "  Pets  ", "type", "EXPENSE"))
+        doPost(a, "/api/categories", Map.of("name", "  SideBusinessIncome  ", "type", "INCOME"))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.name").value("Pets"))
-                .andExpect(jsonPath("$.defaultCategory").value(false));
-        doGet(a, "/api/categories").andExpect(jsonPath("$[*].name", hasItem("Pets")));
-        doGet(b, "/api/categories").andExpect(jsonPath("$[?(@.name == 'Pets')]").isEmpty());
+                .andExpect(jsonPath("$.name").value("SideBusinessIncome"))
+                .andExpect(jsonPath("$.type").value("INCOME"))
+                .andExpect(jsonPath("$.isCustom").value(true));
+        doGet(a, "/api/categories").andExpect(jsonPath("$.categories[*].name", hasItem("SideBusinessIncome")));
+        doGet(b, "/api/categories")
+                .andExpect(jsonPath("$.categories[?(@.name == 'SideBusinessIncome')]").isEmpty());
+    }
+
+    @Test
+    void create_sameNameForDifferentUsers_isAllowed() throws Exception {
+        MockHttpSession a = registerAndLogin(uniqueEmail());
+        MockHttpSession b = registerAndLogin(uniqueEmail());
+        doPost(a, "/api/categories", Map.of("name", "Shared", "type", "EXPENSE")).andExpect(status().isCreated());
+        doPost(b, "/api/categories", Map.of("name", "Shared", "type", "EXPENSE")).andExpect(status().isCreated());
     }
 
     @Test
@@ -60,12 +73,14 @@ class CategoryApiTest extends IntegrationTestBase {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doPost(s, "/api/categories", Map.of("name", "Pets", "type", "EXPENSE")).andExpect(status().isCreated());
         doPost(s, "/api/categories", Map.of("name", "pETS", "type", "EXPENSE")).andExpect(status().isConflict());
+        doPost(s, "/api/categories", Map.of("name", "Pets", "type", "INCOME")).andExpect(status().isConflict());
     }
 
     @Test
     void create_duplicateOfDefault_returnsConflict() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doPost(s, "/api/categories", Map.of("name", "food", "type", "EXPENSE")).andExpect(status().isConflict());
+        doPost(s, "/api/categories", Map.of("name", "Salary", "type", "EXPENSE")).andExpect(status().isConflict());
     }
 
     @Test
@@ -73,6 +88,7 @@ class CategoryApiTest extends IntegrationTestBase {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doPost(s, "/api/categories", Map.of("name", " ", "type", "EXPENSE")).andExpect(status().isBadRequest());
         doPost(s, "/api/categories", Map.of("name", "Pets", "type", "OTHER")).andExpect(status().isBadRequest());
+        doPost(s, "/api/categories", Map.of("name", "Pets")).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -82,30 +98,31 @@ class CategoryApiTest extends IntegrationTestBase {
     }
 
     @Test
-    void delete_customCategory_works_andUnknownIsNotFound() throws Exception {
+    void delete_customCategory_returnsMessage_thenNotFound() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doPost(s, "/api/categories", Map.of("name", "Pet Care", "type", "EXPENSE")).andExpect(status().isCreated());
-        doDelete(s, "/api/categories/Pet Care").andExpect(status().isNoContent());
+        doDelete(s, "/api/categories/Pet Care")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Category deleted successfully"));
         doDelete(s, "/api/categories/Pet Care").andExpect(status().isNotFound());
     }
 
     @Test
-    void delete_categoryUsedByTransaction_returnsConflict() throws Exception {
+    void delete_categoryUsedByTransaction_returnsBadRequest() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         doPost(s, "/api/categories", Map.of("name", "Pets", "type", "EXPENSE")).andExpect(status().isCreated());
-        createTransaction(s, "EXPENSE", "10.00", "2026-10-05", categoryId(s, "Pets"));
-        doDelete(s, "/api/categories/Pets").andExpect(status().isConflict());
+        Long txId = createTransaction(s, "Pets", "10.00", "2026-10-05");
+        doDelete(s, "/api/categories/Pets").andExpect(status().isBadRequest());
+
+        doDelete(s, "/api/transactions/" + txId).andExpect(status().isOk());
+        doDelete(s, "/api/categories/Pets").andExpect(status().isOk());
     }
 
     @Test
-    void otherUsersCategory_cannotBeUsedOrDeleted() throws Exception {
+    void delete_otherUsersCategory_returnsNotFound() throws Exception {
         MockHttpSession a = registerAndLogin(uniqueEmail());
         MockHttpSession b = registerAndLogin(uniqueEmail());
         doPost(a, "/api/categories", Map.of("name", "Secret", "type", "EXPENSE")).andExpect(status().isCreated());
-        Long secretId = categoryId(a, "Secret");
-
-        doPost(b, "/api/transactions", txBody("EXPENSE", "5.00", "2026-10-05", secretId, "steal"))
-                .andExpect(status().isNotFound());
         doDelete(b, "/api/categories/Secret").andExpect(status().isNotFound());
     }
 }

@@ -1,7 +1,9 @@
 package com.example.finance.controller;
 
 import com.example.finance.dto.CreateGoalRequest;
+import com.example.finance.dto.GoalListResponse;
 import com.example.finance.dto.GoalResponse;
+import com.example.finance.dto.MessageResponse;
 import com.example.finance.dto.UpdateGoalRequest;
 import com.example.finance.service.GoalService;
 import jakarta.validation.Valid;
@@ -16,8 +18,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
+/** Routes under /api/goals. */
 @RestController
 @RequestMapping("/api/goals")
 public class GoalController {
@@ -28,30 +29,35 @@ public class GoalController {
         this.goalService = goalService;
     }
 
+    /** POST /api/goals - creates a goal (201). */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public GoalResponse create(@Valid @RequestBody CreateGoalRequest request) {
         return goalService.create(request);
     }
 
+    /** GET /api/goals - all goals of the user. */
     @GetMapping
-    public List<GoalResponse> list() {
+    public GoalListResponse list() {
         return goalService.list();
     }
 
+    /** GET /api/goals/{id} - one goal (403 if it belongs to someone else). */
     @GetMapping("/{id}")
     public GoalResponse get(@PathVariable Long id) {
         return goalService.get(id);
     }
 
+    /** PUT /api/goals/{id} - updates target amount and/or target date. */
     @PutMapping("/{id}")
     public GoalResponse update(@PathVariable Long id, @Valid @RequestBody UpdateGoalRequest request) {
         return goalService.update(id, request);
     }
 
+    /** DELETE /api/goals/{id} - deletes a goal (200 with a message). */
     @DeleteMapping("/{id}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@PathVariable Long id) {
+    public MessageResponse delete(@PathVariable Long id) {
         goalService.delete(id);
+        return new MessageResponse("Goal deleted successfully");
     }
 }

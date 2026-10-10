@@ -1,7 +1,7 @@
 package com.example.finance.service;
 
-import com.example.finance.dto.CategoryTotal;
-import com.example.finance.dto.ReportResponse;
+import com.example.finance.dto.MonthlyReportResponse;
+import com.example.finance.dto.YearlyReportResponse;
 import com.example.finance.entity.TransactionType;
 import com.example.finance.entity.User;
 import com.example.finance.exception.BadRequestException;
@@ -12,9 +12,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+/** Monthly and yearly reports, calculated from the user's current transactions. */
 @Service
 public class ReportService {
 
@@ -30,43 +31,43 @@ public class ReportService {
         this.currentUser = currentUser;
     }
 
+    /** Report for one calendar month (first to last day, both included). */
     @Transactional(readOnly = true)
-    public ReportResponse monthly(int year, int month) {
+    public MonthlyReportResponse monthly(int year, int month) {
         validateYear(year);
         if (month < 1 || month > 12) {
             throw new BadRequestException("Month must be between 1 and 12", "month");
         }
         LocalDate start = LocalDate.of(year, month, 1);
         LocalDate end = start.plusMonths(1).minusDays(1);
-        return build(String.format("%04d-%02d", year, month), start, end);
-    }
-
-    @Transactional(readOnly = true)
-    public ReportResponse yearly(int year) {
-        validateYear(year);
-        return build(String.format("%04d", year), LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31));
-    }
-
-    private ReportResponse build(String period, LocalDate start, LocalDate end) {
         User user = currentUser.getCurrentUser();
-        List<CategoryTotal> income = totals(user.getId(), TransactionType.INCOME, start, end);
-        List<CategoryTotal> expenses = totals(user.getId(), TransactionType.EXPENSE, start, end);
-        BigDecimal totalIncome = sum(income);
-        BigDecimal totalExpenses = sum(expenses);
-        return new ReportResponse(period, totalIncome, income, totalExpenses, expenses,
-                totalIncome.subtract(totalExpenses));
+        Map<String, BigDecimal> income = totals(user.getId(), TransactionType.INCOME, start, end);
+        Map<String, BigDecimal> expenses = totals(user.getId(), TransactionType.EXPENSE, start, end);
+        return new MonthlyReportResponse(month, year, income, expenses, sum(income).subtract(sum(expenses)));
     }
 
-    private List<CategoryTotal> totals(Long userId, TransactionType type, LocalDate start, LocalDate end) {
-        List<CategoryTotal> result = new ArrayList<>();
+    /** Report for one calendar year (January 1 to December 31, both included). */
+    @Transactional(readOnly = true)
+    public YearlyReportResponse yearly(int year) {
+        validateYear(year);
+        LocalDate start = LocalDate.of(year, 1, 1);
+        LocalDate end = LocalDate.of(year, 12, 31);
+        User user = currentUser.getCurrentUser();
+        Map<String, BigDecimal> income = totals(user.getId(), TransactionType.INCOME, start, end);
+        Map<String, BigDecimal> expenses = totals(user.getId(), TransactionType.EXPENSE, start, end);
+        return new YearlyReportResponse(year, income, expenses, sum(income).subtract(sum(expenses)));
+    }
+
+    private Map<String, BigDecimal> totals(Long userId, TransactionType type, LocalDate start, LocalDate end) {
+        Map<String, BigDecimal> result = new LinkedHashMap<>();
         for (Object[] row : transactionRepository.totalsByCategory(userId, type, start, end)) {
-            result.add(new CategoryTotal((String) row[0], (BigDecimal) row[1]));
+            result.put((String) row[0], (BigDecimal) row[1]);
         }
         return result;
     }
 
-    private BigDecimal sum(List<CategoryTotal> totals) {
-        return totals.stream().map(CategoryTotal::total).reduce(ZERO, BigDecimal::add);
+    private BigDecimal sum(Map<String, BigDecimal> totals) {
+        return totals.values().stream().reduce(ZERO, BigDecimal::add);
     }
 
     private void validateYear(int year) {
