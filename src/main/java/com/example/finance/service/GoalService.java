@@ -142,10 +142,10 @@ public class GoalService {
                 .divide(goal.getTargetAmount(), 2, RoundingMode.HALF_UP);
         BigDecimal remaining = goal.getTargetAmount().subtract(progress);
         return new GoalResponse(goal.getId(), goal.getGoalName(), goal.getTargetAmount(), goal.getTargetDate(),
-                goal.getStartDate(), progress, percentage, remaining);
+                goal.getStartDate(), progress, percentage.doubleValue(), remaining);
     }
 
     private BigDecimal orZero(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO.setScale(2) : value;
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

@@ -67,14 +67,14 @@ public class TransactionService {
     /** Lists the user's transactions, newest first, with optional filters (null means no filter). */
     @Transactional(readOnly = true)
     public TransactionListResponse list(LocalDate startDate, LocalDate endDate, Long categoryId,
-                                        TransactionType type) {
+                                        String category, TransactionType type) {
         if (startDate != null && endDate != null && startDate.isAfter(endDate)) {
             throw new BadRequestException("'startDate' must not be after 'endDate'", "startDate");
         }
         User user = currentUser.getCurrentUser();
         Sort newestFirst = Sort.by(Sort.Direction.DESC, "transactionDate").and(Sort.by(Sort.Direction.DESC, "id"));
         List<TransactionResponse> items = transactionRepository
-                .findAll(TransactionSpecifications.filter(user.getId(), startDate, endDate, categoryId, type),
+                .findAll(TransactionSpecifications.filter(user.getId(), startDate, endDate, categoryId, category, type),
                         newestFirst)
                 .stream()
                 .map(TransactionResponse::from)
@@ -83,7 +83,7 @@ public class TransactionService {
     }
 
     /**
-     * Updates amount, description and/or category. The date can never change.
+     * Updates amount, description and/or category. The date can never change: a date in the request is ignored.
      *
      * @throws ResourceNotFoundException if the transaction does not exist or is not the user's
      */
@@ -92,9 +92,6 @@ public class TransactionService {
         User user = currentUser.getCurrentUser();
         Transaction transaction = transactionRepository.findByIdAndUserId(id, user.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found"));
-        if (request.date() != null && !request.date().equals(transaction.getTransactionDate())) {
-            throw new BadRequestException("The date of a transaction cannot be changed", "date");
-        }
         if (request.category() != null && !request.category().isBlank()) {
             Category category = resolveCategory(request.category(), user.getId());
             transaction.setCategory(category);

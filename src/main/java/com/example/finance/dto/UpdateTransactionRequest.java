@@ -9,7 +9,7 @@ import java.time.LocalDate;
 
 /**
  * Body of PUT /api/transactions/{id}. Every field is optional; fields that are left out stay unchanged.
- * The date can be sent, but only if it equals the stored date.
+ * A date may be sent but it is ignored, because the date of a transaction can never change.
  */
 public record UpdateTransactionRequest(
         @Positive @Digits(integer = 15, fraction = 2) BigDecimal amount,

@@ -76,7 +76,7 @@ class GoalServiceTest {
         GoalResponse response = service.get(10L);
 
         assertThat(response.currentProgress()).isEqualByComparingTo("2500.00");
-        assertThat(response.progressPercentage()).isEqualByComparingTo("25.00");
+        assertThat(response.progressPercentage()).isEqualTo(25.00);
         assertThat(response.remainingAmount()).isEqualByComparingTo("7500.00");
     }
 
@@ -88,7 +88,7 @@ class GoalServiceTest {
         GoalResponse response = service.get(10L);
 
         assertThat(response.currentProgress()).isEqualByComparingTo("-1000.00");
-        assertThat(response.progressPercentage()).isEqualByComparingTo("-10.00");
+        assertThat(response.progressPercentage()).isEqualTo(-10.00);
         assertThat(response.remainingAmount()).isEqualByComparingTo("11000.00");
     }
 
@@ -99,7 +99,7 @@ class GoalServiceTest {
 
         GoalResponse response = service.get(10L);
 
-        assertThat(response.progressPercentage()).isEqualByComparingTo("200.00");
+        assertThat(response.progressPercentage()).isEqualTo(200.00);
         assertThat(response.remainingAmount()).isEqualByComparingTo("-10000.00");
     }
 
@@ -111,7 +111,7 @@ class GoalServiceTest {
         GoalResponse response = service.get(10L);
 
         assertThat(response.currentProgress()).isEqualByComparingTo("0.00");
-        assertThat(response.progressPercentage()).isEqualByComparingTo("0.00");
+        assertThat(response.progressPercentage()).isEqualTo(0.00);
         assertThat(response.remainingAmount()).isEqualByComparingTo("10000.00");
     }
 
@@ -121,7 +121,7 @@ class GoalServiceTest {
         stubTotals(START, "1.00", null);
 
         // 1 / 3 * 100 = 33.333... -> 33.33
-        assertThat(service.get(10L).progressPercentage()).isEqualByComparingTo("33.33");
+        assertThat(service.get(10L).progressPercentage()).isEqualTo(33.33);
     }
 
     @Test
@@ -168,7 +168,7 @@ class GoalServiceTest {
         assertThat(response.goalName()).isEqualTo("Fund");
         assertThat(response.targetAmount()).isEqualByComparingTo("200.00");
         assertThat(response.currentProgress()).isEqualByComparingTo("60.00");
-        assertThat(response.progressPercentage()).isEqualByComparingTo("30.00");
+        assertThat(response.progressPercentage()).isEqualTo(30.00);
     }
 
     @Test
@@ -182,7 +182,7 @@ class GoalServiceTest {
 
         assertThat(response.goalName()).isEqualTo("Fund");
         assertThat(response.targetAmount()).isEqualByComparingTo("5000.00");
-        assertThat(response.progressPercentage()).isEqualByComparingTo("50.00");
+        assertThat(response.progressPercentage()).isEqualTo(50.00);
         assertThat(existing.getTargetDate()).isEqualTo(LocalDate.of(2027, 12, 31));
     }
 
@@ -222,7 +222,7 @@ class GoalServiceTest {
         var response = service.list();
 
         assertThat(response.goals()).hasSize(1);
-        assertThat(response.goals().get(0).progressPercentage()).isEqualByComparingTo("10.00");
+        assertThat(response.goals().get(0).progressPercentage()).isEqualTo(10.00);
     }
 
     @Test

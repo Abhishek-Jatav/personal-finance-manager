@@ -106,20 +106,20 @@ class TransactionServiceTest {
 
     @Test
     void listTransactions_rejectsStartAfterEnd() {
-        assertThatThrownBy(() -> service.list(TODAY, TODAY.minusDays(1), null, null))
+        assertThatThrownBy(() -> service.list(TODAY, TODAY.minusDays(1), null, null, null))
                 .isInstanceOf(BadRequestException.class);
     }
 
     @Test
-    void updateTransaction_rejectsDateChange() {
-        when(transactionRepository.findByIdAndUserId(3L, 1L))
-                .thenReturn(Optional.of(existing(category(7, "Food", TransactionType.EXPENSE))));
+    void updateTransaction_ignoresDateInRequest() {
+        Transaction tx = existing(category(7, "Food", TransactionType.EXPENSE));
+        when(transactionRepository.findByIdAndUserId(3L, 1L)).thenReturn(Optional.of(tx));
 
-        UpdateTransactionRequest request = new UpdateTransactionRequest(null, TODAY.minusDays(4), null, null);
+        TransactionResponse response = service.update(3L,
+                new UpdateTransactionRequest(new BigDecimal("9.00"), TODAY.minusDays(1), null, null));
 
-        assertThatThrownBy(() -> service.update(3L, request))
-                .isInstanceOf(BadRequestException.class)
-                .hasMessageContaining("cannot be changed");
+        assertThat(response.date()).isEqualTo(TODAY.minusDays(5));
+        assertThat(response.amount()).isEqualTo(new BigDecimal("9.00"));
     }
 
     @Test

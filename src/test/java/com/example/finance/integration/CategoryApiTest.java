@@ -35,7 +35,7 @@ class CategoryApiTest extends IntegrationTestBase {
                 .andExpect(jsonPath("$.categories[*].name", hasItem("Utilities")))
                 .andExpect(jsonPath("$.categories[?(@.name == 'Salary')].type", hasItem("INCOME")))
                 .andExpect(jsonPath("$.categories[?(@.name == 'Salary')].isCustom", hasItem(false)))
-                .andExpect(jsonPath("$.categories[0].custom").doesNotExist());
+                .andExpect(jsonPath("$.categories[?(@.name == 'Salary')].custom", hasItem(false)));
     }
 
     @Test
@@ -54,7 +54,8 @@ class CategoryApiTest extends IntegrationTestBase {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.name").value("SideBusinessIncome"))
                 .andExpect(jsonPath("$.type").value("INCOME"))
-                .andExpect(jsonPath("$.isCustom").value(true));
+                .andExpect(jsonPath("$.isCustom").value(true))
+                .andExpect(jsonPath("$.custom").value(true));
         doGet(a, "/api/categories").andExpect(jsonPath("$.categories[*].name", hasItem("SideBusinessIncome")));
         doGet(b, "/api/categories")
                 .andExpect(jsonPath("$.categories[?(@.name == 'SideBusinessIncome')]").isEmpty());

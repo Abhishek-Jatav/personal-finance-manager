@@ -18,7 +18,7 @@ public final class TransactionSpecifications {
 
     /** Always scoped to the owner; every other filter is optional (null means "no filter"). */
     public static Specification<Transaction> filter(Long userId, LocalDate from, LocalDate to,
-                                                    Long categoryId, TransactionType type) {
+                                                    Long categoryId, String categoryName, TransactionType type) {
         return (root, query, cb) -> {
             if (!Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
                 root.fetch("category", JoinType.LEFT);
@@ -33,6 +33,10 @@ public final class TransactionSpecifications {
             }
             if (categoryId != null) {
                 predicates.add(cb.equal(root.get("category").get("id"), categoryId));
+            }
+            if (categoryName != null && !categoryName.isBlank()) {
+                predicates.add(cb.equal(cb.lower(root.get("category").<String>get("name")),
+                        categoryName.trim().toLowerCase()));
             }
             if (type != null) {
                 predicates.add(cb.equal(root.get("type"), type));

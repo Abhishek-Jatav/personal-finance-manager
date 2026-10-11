@@ -46,7 +46,7 @@ The PDF asks for session cookies only, so CSRF protection is off by default. It 
 Full details with examples: docs/api.md
 
 - Auth: POST /api/auth/register, POST /api/auth/login, POST /api/auth/logout
-- Transactions: POST, GET (startDate, endDate, categoryId, type), PUT /{id}, DELETE /{id} under /api/transactions
+- Transactions: POST, GET (startDate, endDate, categoryId, category, type), PUT /{id}, DELETE /{id} under /api/transactions
 - Categories: GET /api/categories, POST /api/categories, DELETE /api/categories/{name}
 - Goals: POST, GET, GET /{id}, PUT /{id}, DELETE /{id} under /api/goals
 - Reports: GET /api/reports/monthly/{year}/{month}, GET /api/reports/yearly/{year}
@@ -71,11 +71,20 @@ Error format (every error):
 - The transaction type comes from the category you choose. Categories are sent by name.
 - Category names are unique per user and cannot equal a default name (ignoring case). This keeps name lookups unambiguous.
 - Status codes follow the PDF: deleting a default category is 403; deleting a category used by a transaction is 400; another user's goal is 403; another user's transaction is 404 (the PDF does not list 403 for transactions).
+- A date sent in a transaction update is ignored: the date of a transaction never changes (the assignment test script expects this).
 - Goal target date must be in the future. Goal start date defaults to today and cannot be in the future.
 - Business timezone is Asia/Kolkata (app.timezone) and currency is INR (app.currency). "Today" and the "no future dates" rule use this timezone.
 - Passwords are stored with BCrypt. The session cookie is HttpOnly (Secure on HTTPS in prod). CSRF is off by default because the PDF does not ask for it.
 
-## 7. Deploying on Render
+## 7. Running the assignment test script
+
+Start the app, then in Git Bash:
+
+    bash financial_manager_tests.sh http://localhost:8080/api
+
+The script compares numbers as plain text, so the JSON number formats matter: money amounts have 2 decimals (6550.00), percentages are plain decimals (65.5, 0.0), and a total of nothing is 0. The API follows this.
+
+## 8. Deploying on Render
 
 The H2 database lives in memory, so data is lost when the app restarts. The assignment lists H2 as optional, so this is acceptable for the demo.
 
@@ -87,7 +96,7 @@ The H2 database lives in memory, so data is lost when the app restarts. The assi
 
 The prod profile turns off the H2 console and marks the session cookie Secure, so login only works over https there.
 
-## 8. Project layout
+## 9. Project layout
 
     src/main/java/com/example/finance
       config/       settings, security setup, default category seeding
@@ -101,7 +110,7 @@ The prod profile turns off the H2 console and marks the session cookie Secure, s
     src/test/java   unit tests (service) and API tests (integration)
     docs/           the original specification documents (docs/api.md is the current API)
 
-## 9. Settings
+## 10. Settings
 
 - SPRING_PROFILES_ACTIVE: local (default), test or prod
 - SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD: database (prod)

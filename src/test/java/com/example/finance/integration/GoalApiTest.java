@@ -56,7 +56,7 @@ class GoalApiTest extends IntegrationTestBase {
         doPost(s, "/api/goals", goalBody("Defaults", "1000.00", "2027-06-30", null))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.startDate").value("2026-10-10"))
-                .andExpect(jsonPath("$.currentProgress").value(0.0));
+                .andExpect(jsonPath("$.currentProgress").value(0));
     }
 
     @Test
@@ -136,12 +136,30 @@ class GoalApiTest extends IntegrationTestBase {
     }
 
     @Test
+    void numberFormat_matchesAssignmentScript() throws Exception {
+        MockHttpSession s = registerAndLogin(uniqueEmail());
+        createTransaction(s, "Salary", "6550.00", "2026-10-02");
+        String raw = doPost(s, "/api/goals", goalBody("Fmt", "10000.00", "2027-06-30", "2026-10-01"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat(raw)
+                .contains("\"currentProgress\":6550.00")
+                .contains("\"progressPercentage\":65.5,")
+                .contains("\"remainingAmount\":3450.00");
+
+        String empty = doPost(s, "/api/goals", goalBody("Empty", "5000.00", "2027-06-30", "2026-10-10"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat(empty)
+                .contains("\"currentProgress\":0,")
+                .contains("\"progressPercentage\":0.0,");
+    }
+
+    @Test
     void progress_changesWhenTransactionIsDeleted() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         Long id = createTransaction(s, "Salary", "1000.00", "2026-10-02");
         doPost(s, "/api/goals", goalBody("Goal", "2000.00", "2027-01-01", "2026-10-01"))
                 .andExpect(jsonPath("$.currentProgress").value(1000.0));
         doDelete(s, "/api/transactions/" + id).andExpect(status().isOk());
-        doGet(s, "/api/goals").andExpect(jsonPath("$.goals[0].currentProgress").value(0.0));
+        doGet(s, "/api/goals").andExpect(jsonPath("$.goals[0].currentProgress").value(0));
     }
 }

@@ -118,6 +118,8 @@ class TransactionApiTest extends IntegrationTestBase {
         doGet(s, "/api/transactions?categoryId=" + defaultCategoryId("Rent"))
                 .andExpect(jsonPath("$.transactions", hasSize(1)))
                 .andExpect(jsonPath("$.transactions[0].category").value("Rent"));
+        doGet(s, "/api/transactions?category=food").andExpect(jsonPath("$.transactions", hasSize(1)));
+        doGet(s, "/api/transactions?category=Salary").andExpect(jsonPath("$.transactions", hasSize(1)));
         doGet(s, "/api/transactions?type=INCOME").andExpect(jsonPath("$.transactions", hasSize(1)));
         doGet(s, "/api/transactions?type=EXPENSE&startDate=2026-10-02")
                 .andExpect(jsonPath("$.transactions", hasSize(1)));
@@ -160,14 +162,17 @@ class TransactionApiTest extends IntegrationTestBase {
     }
 
     @Test
-    void update_rejectsDateChange_butAcceptsSameDate() throws Exception {
+    void update_ignoresDateField() throws Exception {
         MockHttpSession s = registerAndLogin(uniqueEmail());
         Long id = createTransaction(s, "Food", "10.00", "2026-10-05");
-        doPut(s, "/api/transactions/" + id, Map.of("date", "2026-10-06", "amount", 1))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.fieldErrors[0].field").value("date"));
-        doPut(s, "/api/transactions/" + id, Map.of("date", "2026-10-05", "amount", 1))
-                .andExpect(status().isOk());
+        doPut(s, "/api/transactions/" + id, Map.of("date", "2026-10-06"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.date").value("2026-10-05"));
+        doPut(s, "/api/transactions/" + id, Map.of("date", "2026-10-06", "amount", 12.5, "description", "changed"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.date").value("2026-10-05"))
+                .andExpect(jsonPath("$.amount").value(12.5))
+                .andExpect(jsonPath("$.description").value("changed"));
     }
 
     @Test

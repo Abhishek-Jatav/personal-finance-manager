@@ -41,17 +41,18 @@ public class TransactionController {
         return transactionService.create(request);
     }
 
-    /** GET /api/transactions - newest first; optional filters startDate, endDate, categoryId, type. */
+    /** GET /api/transactions - newest first; optional filters startDate, endDate, categoryId, category (name), type. */
     @GetMapping
     public TransactionListResponse list(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate startDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate endDate,
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) String category,
             @RequestParam(required = false) TransactionType type) {
-        return transactionService.list(startDate, endDate, categoryId, type);
+        return transactionService.list(startDate, endDate, categoryId, category, type);
     }
 
-    /** PUT /api/transactions/{id} - updates amount, description and/or category (the date cannot change). */
+    /** PUT /api/transactions/{id} - updates amount, description and/or category (a date in the body is ignored). */
     @PutMapping("/{id}")
     public TransactionResponse update(@PathVariable Long id, @Valid @RequestBody UpdateTransactionRequest request) {
         return transactionService.update(id, request);

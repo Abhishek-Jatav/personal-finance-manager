@@ -13,9 +13,9 @@ Base path: /api. Login uses a session cookie. All routes except register and log
 - POST /api/transactions  body: amount, date (YYYY-MM-DD, not future), category (name), description (optional)
   201 {"id","amount","date","category","description","type"} | 400 | 401
   The type (INCOME or EXPENSE) comes from the category. An unknown category is 400.
-- GET /api/transactions  optional: startDate, endDate, categoryId, type
+- GET /api/transactions  optional: startDate, endDate, categoryId, category (name), type
   200 {"transactions":[...]} newest first | 400 | 401
-- PUT /api/transactions/{id}  body (all optional): amount, description, category (name), date (must equal the stored date)
+- PUT /api/transactions/{id}  body (all optional): amount, description, category (name). A date in the body is ignored; the date never changes.
   200 | 400 | 401 | 404
 - DELETE /api/transactions/{id}  200 {"message":"Transaction deleted successfully"} | 401 | 404
 

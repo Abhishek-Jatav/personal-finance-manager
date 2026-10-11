@@ -50,7 +50,7 @@ class ReportApiTest extends IntegrationTestBase {
         doGet(s, "/api/reports/monthly/2026/09").andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalIncome").isEmpty())
                 .andExpect(jsonPath("$.totalExpenses").isEmpty())
-                .andExpect(jsonPath("$.netSavings").value(0.0));
+                .andExpect(jsonPath("$.netSavings").value(0));
     }
 
     @Test
@@ -72,7 +72,18 @@ class ReportApiTest extends IntegrationTestBase {
         doGet(b, "/api/reports/monthly/2026/10").andExpect(jsonPath("$.totalIncome.Salary").value(99999.0));
 
         doDelete(b, "/api/transactions/" + bigId).andExpect(status().isOk());
-        doGet(b, "/api/reports/monthly/2026/10").andExpect(jsonPath("$.netSavings").value(0.0));
+        doGet(b, "/api/reports/monthly/2026/10").andExpect(jsonPath("$.netSavings").value(0));
+    }
+
+    @Test
+    void numberFormat_matchesAssignmentScript() throws Exception {
+        MockHttpSession s = registerAndLogin(uniqueEmail());
+        String empty = doGet(s, "/api/reports/monthly/2024/12").andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat(empty).contains("\"netSavings\":0}");
+
+        createTransaction(s, "Salary", "3000.00", "2024-02-15");
+        String filled = doGet(s, "/api/reports/monthly/2024/2").andReturn().getResponse().getContentAsString();
+        org.assertj.core.api.Assertions.assertThat(filled).contains("\"netSavings\":3000.00");
     }
 
     @Test

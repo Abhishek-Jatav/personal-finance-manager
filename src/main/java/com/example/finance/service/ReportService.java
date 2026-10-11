@@ -21,7 +21,7 @@ public class ReportService {
 
     private static final int MIN_YEAR = 1900;
     private static final int MAX_YEAR = 9999;
-    private static final BigDecimal ZERO = BigDecimal.ZERO.setScale(2);
+    private static final BigDecimal ZERO = BigDecimal.ZERO;
 
     private final TransactionRepository transactionRepository;
     private final CurrentUserProvider currentUser;
